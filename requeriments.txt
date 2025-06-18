@@ -1,0 +1,12 @@
+streamlit
+pandas
+geopandas
+folium
+streamlit-folium
+plotly
+matplotlib
+Pillow
+numpy
+pyarrow
+streamlit-option-menu
+pybind11
