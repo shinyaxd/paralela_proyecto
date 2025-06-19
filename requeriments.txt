@@ -1,12 +1,23 @@
+# Framework para la aplicación web
 streamlit
+streamlit-option-menu
+
+# Manipulación de datos
 pandas
+numpy
+
+# Soporte Geoespacial
 geopandas
 folium
 streamlit-folium
+
+# Visualización y Gráficos
 plotly
 matplotlib
 Pillow
-numpy
+
+# Rendimiento y Formatos de Archivo
 pyarrow
-streamlit-option-menu
+
+# Desarrollo C++ (Necesario para compilar el módulo)
 pybind11
