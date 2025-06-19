@@ -33,7 +33,7 @@ RUN g++ -O3 -Wall -shared -std=c++11 -fPIC \
     -I/usr/local/include/python3.10 \
     -I/usr/local/lib/python3.10/site-packages/pybind11/include \
     -o motor_sjoin_cpp$(python3-config --extension-suffix) \
-    -lgeos_c
+    -lgeos_c -fopenmp
 
 # Exponer el puerto de Streamlit (Render usará este puerto)
 EXPOSE 10000

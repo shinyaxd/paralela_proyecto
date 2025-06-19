@@ -3,7 +3,7 @@
 #include <pybind11/stl.h>
 #include <pybind11/numpy.h> // Para manejar NumPy directamente
 
-#include "procesador_sjoin.h" // 🔥 Correcto: solo incluir el header, no el .cpp
+#include "procesador_sjoin.h" // Correcto: solo incluir el header, no el .cpp
 
 namespace py = pybind11;
 
