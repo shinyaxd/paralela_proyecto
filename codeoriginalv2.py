@@ -282,43 +282,41 @@ def pagina_conclusion():
 
 
 def pagina_sobre_nosotros():
+    st.title("¡Sobre Nosotros!")   
+    st.markdown("### 🧑‍💻 Equipo del Proyecto")
+    st.divider()
+
     personas = [
         {"nombre": "", "info": "", "imagen": "img/noemi.png"},
-        {"nombre": "", "info": "", "imagen": "img/carlos.png"},
-        {"nombre": "", "info": "", "imagen": "img/nilda.png"},
-        {"nombre": "", "info": "", "imagen": "img/bertil.png"}
+        {"nombre": "", "info": "", "imagen": "img/ruben.png"},
+        {"nombre": "", "info": "", "imagen": "img/sebastian.png"},
+        {"nombre": "", "info": "", "imagen": "img/valery.png"},
+        {"nombre": "", "info": "", "imagen": "img/milagros.png"}
     ]
 
-    st.title("¡Sobre Nosotros!")   
-
-    st.markdown("### 🧑‍💻 Equipo del Proyecto")
-
-    # Crear un diseño en 2 filas y 2 columnas
-    col1, col2 = st.columns(2)
-
-    # Mostrar las primeras dos imágenes en la primera fila
-    with col1:
-        st.image(personas[0]["imagen"], width=450, caption=personas[0]["nombre"])
-        st.markdown(f"**{personas[0]['nombre']}**")
-        st.write(personas[0]["info"])
-
-    with col2:
-        st.image(personas[1]["imagen"], width=450, caption=personas[1]["nombre"])
-        st.markdown(f"**{personas[1]['nombre']}**")
-        st.write(personas[1]["info"])
-
-    # Segunda fila con dos columnas
-    col3, col4 = st.columns(2)
-
-    with col3:
-        st.image(personas[2]["imagen"], width=450, caption=personas[2]["nombre"])
-        st.markdown(f"**{personas[2]['nombre']}**")
-        st.write(personas[2]["info"])
-
-    with col4:
-        st.image(personas[3]["imagen"], width=450, caption=personas[3]["nombre"])
-        st.markdown(f"**{personas[3]['nombre']}**")
-        st.write(personas[3]["info"])
+    # Iteramos sobre la lista de personas de dos en dos para crear las filas
+    for i in range(0, len(personas), 2):
+        
+        # Creamos una nueva fila con dos columnas en cada iteración
+        col1, col2 = st.columns(2)
+        
+        # Procesamos la primera persona de la fila (la de la izquierda)
+        with col1:
+            try:
+                # Usamos el ancho fijo de 450 que preferías
+                st.image(personas[i]["imagen"], width=450)
+            except FileNotFoundError:
+                st.error(f"Error: No se encontró la imagen '{personas[i]['imagen']}'")
+        
+        # Verificamos si existe una segunda persona para esta fila (para evitar errores con números impares)
+        if (i + 1) < len(personas):
+            # Si existe, la procesamos en la columna de la derecha
+            with col2:
+                try:
+                    # Usamos el ancho fijo de 450 que preferías
+                    st.image(personas[i+1]["imagen"], width=450)
+                except FileNotFoundError:
+                    st.error(f"Error: No se encontró la imagen '{personas[i+1]['imagen']}'")
 
 # --- Funciones de visualización para la página de gráficos ---
 
@@ -366,7 +364,6 @@ def visualizacion_profundidad(df, tipo_grafico):
 # 5. ESTRUCTURA PRINCIPAL DE LA APLICACIÓN (MAIN)
 # =============================================================================
 def main():
-    # Se movió la notificación de carga aquí, fuera de la función en caché.
     with st.spinner('Cargando y procesando datos... Este mensaje solo aparece la primera vez.'):
         # Cargar los datos una sola vez al inicio. Streamlit se encarga de la magia de la caché.
         gdf_analisis, departamentos_gdf = cargar_datos()
