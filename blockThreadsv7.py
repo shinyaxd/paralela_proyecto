@@ -3,66 +3,83 @@
 # =============================================================================
 import streamlit as st
 import pandas as pd
-import plotly.express as px
-from streamlit_option_menu import option_menu
 import geopandas as gpd
 import folium
-import pydeck as pdk
 from folium.plugins import MarkerCluster
-import matplotlib.pyplot as plt
+from streamlit_option_menu import option_menu
 from PIL import Image
 from streamlit_folium import st_folium
+import plotly.express as px
+import matplotlib.pyplot as plt
+import os
+import time
+import pydeck as pdk
+
+# Importa el motor C++ compilado. Si no existe, la app se detendrá con un error claro.
+try:
+    import motor_sjoin_cpp
+except ImportError:
+    st.error(
+        "Error Crítico: No se pudo importar el módulo 'motor_sjoin_cpp'. "
+        "Asegúrate de haberlo compilado con éxito (Paso 3 de la guía anterior)."
+    )
+    st.stop()
 
 # =============================================================================
 # 2. CONFIGURACIÓN DE LA PÁGINA
 # =============================================================================
-st.set_page_config(page_title="Catálogo Sísmico del Perú", page_icon="🇵🇪", layout="wide")
+st.set_page_config(page_title="Catálogo Sísmico del Perú", page_icon="🌍", layout="wide")
 
 # =============================================================================
-# 3. CARGA Y PROCESAMIENTO DE DATOS (LA PARTE MÁS IMPORTANTE)
+# 3. FUNCIÓN DE CARGA DE DATOS IMPULSADA POR C++ (CON CACHÉ)
 # =============================================================================
 @st.cache_data
-def cargar_datos():
+def cargar_datos_con_motor_cpp():
     """
-    Carga y procesa todos los datos necesarios una sola vez.
-    El resultado se guarda en caché para un rendimiento óptimo.
+    Función de carga principal que delega el trabajo pesado (sjoin) al motor C++.
+    Se ejecuta una sola vez gracias a la caché.
     """
+    inicio_total = time.time()
+    
+    # 1. Cargar los datos crudos desde los archivos
+    sismos_df = pd.read_csv("Dataset_1960_2023_sismo.csv")
+    departamentos_gdf = gpd.read_file("departamentos_perú.geojson")
+    sismos_df.dropna(subset=['LATITUD', 'LONGITUD'], inplace=True)
+    
+    # 2. Preparar los datos en un formato simple para C++
+    coords_sismos = list(zip(sismos_df['LATITUD'], sismos_df['LONGITUD']))
+    wkts_departamentos = departamentos_gdf["geometry"].to_wkt().tolist()
+    nombres_departamentos = departamentos_gdf["NOMBDEP"].tolist()
 
-    # La función ahora solo se enfoca en el procesamiento de datos.
-    df = pd.read_parquet("Dataset_sismos.parquet", engine='pyarrow')
-
-    # Cargar el archivo GeoJSON con los límites de los departamentos
-    departamentos_gdf = gpd.read_file('departamentos_perú.geojson')
-    if departamentos_gdf.crs.to_string() != "EPSG:4326":
-        departamentos_gdf = departamentos_gdf.to_crs("EPSG:4326")
-
-    # Crear el GeoDataFrame con los sismos
-    sismos_gdf = gpd.GeoDataFrame(
-        df,
-        geometry=gpd.points_from_xy(df['LONGITUD'], df['LATITUD']),
-        crs="EPSG:4326"
+    # 3. ¡Llamar al motor de C++ para hacer el trabajo pesado!
+    resultados_cpp = motor_sjoin_cpp.realizar_sjoin_paralelo_cpp(
+        coords_sismos, wkts_departamentos, nombres_departamentos
     )
-
-    # Realizar el costoso 'spatial join' una sola vez
-    gdf_analisis = gpd.sjoin(sismos_gdf, departamentos_gdf, how="inner", predicate="intersects")
     
-    # Limpieza final y creación de columnas de tiempo
-    if 'index_right' in gdf_analisis.columns:
-        gdf_analisis = gdf_analisis.drop(columns=['index_right'])
+    # 4. Integrar los resultados y preparar el DataFrame final para la app
+    sismos_df['DEPARTAMENTO'] = resultados_cpp
+    sismos_df = sismos_df[sismos_df['DEPARTAMENTO'] != "Fuera de Perú"]
     
-    gdf_analisis['AÑO'] = gdf_analisis['FECHA_UTC'].dt.year
-    gdf_analisis['MES_NUM'] = gdf_analisis['FECHA_UTC'].dt.month
-    
-    # Crear nombres de meses en español para los filtros y gráficos
+    sismos_df['FECHA_UTC'] = pd.to_datetime(sismos_df['FECHA_UTC'], format='%Y%m%d', errors='coerce')
+    sismos_df['AÑO'] = sismos_df['FECHA_UTC'].dt.year
     month_names_map = {1:"Enero", 2:"Febrero", 3:"Marzo", 4:"Abril", 5:"Mayo", 6:"Junio", 7:"Julio", 8:"Agosto", 9:"Septiembre", 10:"Octubre", 11:"Noviembre", 12:"Diciembre"}
-    gdf_analisis['MES_NOMBRE'] = gdf_analisis['MES_NUM'].map(month_names_map)
-    gdf_analisis['DIA'] = gdf_analisis['FECHA_UTC'].dt.day
+    sismos_df['MES_NOMBRE'] = sismos_df['FECHA_UTC'].dt.month.map(month_names_map)
+
+    # Convertimos el resultado final a un GeoDataFrame para el mapa
+    gdf_final = gpd.GeoDataFrame(
+        sismos_df, geometry=gpd.points_from_xy(sismos_df['LONGITUD'], sismos_df['LATITUD'])
+    )
     
-    return gdf_analisis, departamentos_gdf
+    fin_total = time.time()
+    tiempo_total = fin_total - inicio_total
+    
+    return gdf_final, departamentos_gdf, tiempo_total
 
 # =============================================================================
 # 4. DEFINICIÓN DE LAS PÁGINAS DE LA APLICACIÓN
+# (Aquí debes pegar el contenido de tus páginas)
 # =============================================================================
+
 
 def pagina_inicio():
     st.title("Catálogo Sísmico 1960 - 2023")
@@ -85,6 +102,7 @@ def pagina_inicio():
     """)
     img = Image.open("img/sismoportada.jpeg")
     img = img.resize((250, 300))  # Ajusta el valor de la altura según lo necesario
+    
     # Mostrar la imagen redimensionada
     st.image(img)
     st.markdown("https://sinia.minam.gob.pe/sites/default/files/sial-sialtrujillo/archivos/public/docs/328.pdf")
@@ -180,7 +198,118 @@ def pagina_inicio():
 
     st.info("🙌La naturaleza puede ser poderosa, pero la valentía y la solidaridad de las personas son indestructibles.🥰")
 
+def pagina_mapa(gdf, departamentos_gdf):
+    st.title("🗺️ Mapa Interactivo de Sismos - Degradado Oscuro y Círculos Grandes")
 
+    # --- Filtros ---
+    with st.sidebar:
+        st.header("Filtros del Mapa")
+        deptos = ["Todos"] + sorted(gdf["DEPARTAMENTO"].unique())
+        filtro_deptos = st.multiselect("Departamento", deptos, default=["Todos"])
+
+        años = sorted(gdf["AÑO"].dropna().unique())
+        r_anos = st.slider("Rango de Años", int(min(años)), int(max(años)), (int(min(años)), int(max(años))))
+
+        r_mag = st.slider("Magnitud", float(gdf["MAGNITUD"].min()), float(gdf["MAGNITUD"].max()), 
+                          (float(gdf["MAGNITUD"].min()), float(gdf["MAGNITUD"].max())))
+
+        r_prof = st.slider("Profundidad (km)", float(gdf["PROFUNDIDAD"].min()), float(gdf["PROFUNDIDAD"].max()), 
+                          (float(gdf["PROFUNDIDAD"].min()), float(gdf["PROFUNDIDAD"].max())))
+
+    # --- Filtros aplicados ---
+    mask = (gdf["AÑO"].between(*r_anos)) & \
+           (gdf["MAGNITUD"].between(*r_mag)) & \
+           (gdf["PROFUNDIDAD"].between(*r_prof))
+    if "Todos" not in filtro_deptos:
+        mask &= gdf["DEPARTAMENTO"].isin(filtro_deptos)
+    filtered_gdf = gdf[mask]
+    st.info(f"🔍 Mostrando {len(filtered_gdf)} de {len(gdf)} sismos")
+
+    # --- Agrupación por departamento ---
+    grouped = filtered_gdf.groupby("DEPARTAMENTO").agg({
+        "LATITUD": "mean",
+        "LONGITUD": "mean",
+        "MAGNITUD": "mean",
+        "FECHA_UTC": "count"
+    }).reset_index().rename(columns={"FECHA_UTC": "CANTIDAD_SISMOS"})
+
+    max_sismos = grouped["CANTIDAD_SISMOS"].max()
+    min_sismos = grouped["CANTIDAD_SISMOS"].min()
+
+    # --- Degradado verde oscuro → amarillo fuerte → rojo oscuro
+    def color_degradado(cantidad):
+        ratio = (cantidad - min_sismos) / (max_sismos - min_sismos + 1e-9)
+        if ratio <= 0.5:
+            # Verde oscuro (0,128,0) → Amarillo fuerte (255,215,0)
+            r = int(ratio * 2 * (255 - 0))
+            g = int(128 + ratio * 2 * (215 - 128))
+            b = 0
+        else:
+            # Amarillo fuerte (255,215,0) → Rojo oscuro (200,0,0)
+            r = int(255 - (ratio - 0.5) * 2 * (255 - 200))
+            g = int(215 - (ratio - 0.5) * 2 * 215)
+            b = 0
+        return [r, g, b, 220]
+
+    grouped["color"] = grouped["CANTIDAD_SISMOS"].apply(color_degradado)
+    grouped["radius"] = grouped["CANTIDAD_SISMOS"] / max_sismos * 100000  # aún más grandes
+
+    # --- Círculos (Scatterplot) ---
+    circle_layer = pdk.Layer(
+        "ScatterplotLayer",
+        data=grouped,
+        get_position='[LONGITUD, LATITUD]',
+        get_radius="radius",
+        get_fill_color="color",
+        pickable=True,
+        auto_highlight=True
+    )
+
+    # --- Texto con número de sismos ---
+    text_layer = pdk.Layer(
+        "TextLayer",
+        data=grouped,
+        get_position='[LONGITUD, LATITUD]',
+        get_text="CANTIDAD_SISMOS",
+        get_size=18,
+        get_color=[255, 255, 255],
+        get_alignment_baseline="'center'",
+    )
+
+    # --- Bordes departamentales ---
+    deptos_layer = pdk.Layer(
+        "GeoJsonLayer",
+        data=departamentos_gdf.__geo_interface__,
+        stroked=True,
+        filled=False,
+        get_line_color=[0, 100, 255],
+        line_width_min_pixels=2,
+    )
+
+    # --- Vista inicial ---
+    view_state = pdk.ViewState(
+        latitude=-9.2,
+        longitude=-75,
+        zoom=5,
+        pitch=0
+    )
+
+    # --- Tooltip al pasar el mouse ---
+    tooltip = {
+        "html": "<b>Departamento:</b> {DEPARTAMENTO} <br>"
+                "<b>Sismos:</b> {CANTIDAD_SISMOS} <br>"
+                "<b>Magnitud Promedio:</b> {MAGNITUD:.2f}",
+        "style": {"color": "white", "backgroundColor": "steelblue"}
+    }
+
+    # --- Renderizar mapa final ---
+    st.pydeck_chart(pdk.Deck(
+        layers=[deptos_layer, circle_layer, text_layer],
+        initial_view_state=view_state,
+        tooltip=tooltip,
+        map_style="mapbox://styles/mapbox/light-v10"
+    ))
+    
 def pagina_graficos(df):
     st.title("📊 Análisis Gráfico de Sismos")
     
@@ -204,115 +333,6 @@ def pagina_graficos(df):
         visualizacion_magnitud(df, tipo_grafico)
     elif selected_graph == "Profundidad":
         visualizacion_profundidad(df, tipo_grafico)
-
-def pagina_mapa(df, departamentos_gdf):
-    st.title("🌎 Mapa Interactivo de Sismos en Perú")
-
-    # --- Filtros ---
-    with st.sidebar:
-        st.header("Filtros del Mapa")
-        deptos = ["Todos"] + sorted(df["NOMBDEP"].unique())
-        filtro_deptos = st.multiselect("Departamento", deptos, default=["Todos"])
-
-        años = sorted(df["AÑO"].dropna().unique())
-        r_anos = st.slider("Rango de Años", int(min(años)), int(max(años)), (int(min(años)), int(max(años))))
-
-        r_mag = st.slider("Magnitud", float(df["MAGNITUD"].min()), float(df["MAGNITUD"].max()), 
-                          (float(df["MAGNITUD"].min()), float(df["MAGNITUD"].max())))
-
-        r_prof = st.slider("Profundidad (km)", float(df["PROFUNDIDAD"].min()), float(df["PROFUNDIDAD"].max()), 
-                          (float(df["PROFUNDIDAD"].min()), float(df["PROFUNDIDAD"].max())))
-
-    # --- Filtros aplicados ---
-    mask = (df["AÑO"].between(*r_anos)) & \
-           (df["MAGNITUD"].between(*r_mag)) & \
-           (df["PROFUNDIDAD"].between(*r_prof))
-    if "Todos" not in filtro_deptos:
-        mask &= df["NOMBDEP"].isin(filtro_deptos)
-
-    filtered_df = df[mask]
-    st.info(f"🔍 Mostrando {len(filtered_df)} de {len(df)} sismos")
-
-    if filtered_df.empty:
-        st.warning("⚠️ No hay sismos con los filtros seleccionados.")
-        return
-
-    # --- Agrupación por departamento ---
-    grouped = filtered_df.groupby("NOMBDEP").agg({
-        "LATITUD": "mean",
-        "LONGITUD": "mean",
-        "MAGNITUD": "mean",
-        "FECHA_UTC": "count"
-    }).reset_index().rename(columns={"FECHA_UTC": "CANTIDAD_SISMOS"})
-
-    max_sismos = grouped["CANTIDAD_SISMOS"].max()
-    min_sismos = grouped["CANTIDAD_SISMOS"].min()
-
-    def color_degradado(cantidad):
-        ratio = (cantidad - min_sismos) / (max_sismos - min_sismos + 1e-9)
-        if ratio <= 0.5:
-            r = int(ratio * 2 * 255)
-            g = int(128 + ratio * 2 * (215 - 128))
-            b = 0
-        else:
-            r = int(255 - (ratio - 0.5) * 2 * (255 - 200))
-            g = int(215 - (ratio - 0.5) * 2 * 215)
-            b = 0
-        return [r, g, b, 180]
-
-    grouped["color"] = grouped["CANTIDAD_SISMOS"].apply(color_degradado)
-    grouped["radius"] = grouped["CANTIDAD_SISMOS"] / max_sismos * 100000
-
-    # --- Capas de Pydeck ---
-    circle_layer = pdk.Layer(
-        "ScatterplotLayer",
-        data=grouped,
-        get_position='[LONGITUD, LATITUD]',
-        get_radius="radius",
-        get_fill_color="color",
-        pickable=True,
-        auto_highlight=True
-    )
-
-    text_layer = pdk.Layer(
-        "TextLayer",
-        data=grouped,
-        get_position='[LONGITUD, LATITUD]',
-        get_text="CANTIDAD_SISMOS",
-        get_size=18,
-        get_color=[255, 255, 255],
-        get_alignment_baseline="'center'",
-    )
-
-    geo_layer = pdk.Layer(
-        "GeoJsonLayer",
-        data=departamentos_gdf.__geo_interface__,
-        stroked=True,
-        filled=False,
-        get_line_color=[0, 100, 255],
-        line_width_min_pixels=2,
-    )
-
-    view_state = pdk.ViewState(
-        latitude=-9.2,
-        longitude=-75,
-        zoom=5,
-        pitch=0
-    )
-
-    tooltip = {
-        "html": "<b>Departamento:</b> {NOMBDEP} <br>"
-                "<b>Sismos:</b> {CANTIDAD_SISMOS} <br>"
-                "<b>Magnitud Promedio:</b> {MAGNITUD:.2f}",
-        "style": {"color": "white", "backgroundColor": "steelblue"}
-    }
-
-    st.pydeck_chart(pdk.Deck(
-        layers=[geo_layer, circle_layer, text_layer],
-        initial_view_state=view_state,
-        tooltip=tooltip,
-        map_style="mapbox://styles/mapbox/light-v10"
-    ))
 
 
 def pagina_conclusion():
@@ -381,7 +401,6 @@ def pagina_sobre_nosotros():
                     st.error(f"Error: No se encontró la imagen '{personas[i+1]['imagen']}'")
 
 # --- Funciones de visualización para la página de gráficos ---
-
 def visualizacion_anos(df, tipo_grafico):
     st.subheader(f"Análisis de Sismos por Año - Gráfico de {tipo_grafico}")
     conteo = df['AÑO'].value_counts().sort_index()
@@ -421,24 +440,36 @@ def visualizacion_profundidad(df, tipo_grafico):
         fig = px.line(conteo, x=conteo.index, y=conteo.values, markers=True, labels={"x": "Categoría de Profundidad", "y": "Cantidad de Sismos"}, title="Frecuencia de Sismos por Profundidad")
     st.plotly_chart(fig, use_container_width=True)
 
-
 # =============================================================================
-# 5. ESTRUCTURA PRINCIPAL DE LA APLICACIÓN (MAIN)
+# 5. ESTRUCTURA PRINCIPAL DE LA APLICACIÓN
 # =============================================================================
 def main():
-    with st.spinner('Cargando y procesando datos... Este mensaje solo aparece la primera vez.'):
-        # Cargar los datos una sola vez al inicio. Streamlit se encarga de la magia de la caché.
-        gdf_analisis, departamentos_gdf = cargar_datos()
+    # Usamos el estado de sesión para evitar recargar los datos dos veces
+    if "gdf_analisis" not in st.session_state:
+        with st.spinner(f'Procesando datos con el motor C++... (solo la primera vez)'):
+            gdf_analisis, departamentos_gdf, tiempo_total = cargar_datos_con_motor_cpp()
+            st.session_state["gdf_analisis"] = gdf_analisis
+            st.session_state["departamentos_gdf"] = departamentos_gdf
+            st.session_state["tiempo_total"] = tiempo_total
+    else:
+        gdf_analisis = st.session_state["gdf_analisis"]
+        departamentos_gdf = st.session_state["departamentos_gdf"]
+        tiempo_total = st.session_state["tiempo_total"]
 
+    # Mostrar tiempo de carga solo cuando ya está listo
+    st.sidebar.success(f"Carga completada en {tiempo_total:.2f} segundos.")
+
+    # Menú de navegación
     with st.sidebar:
         st.image("img/logo_upch.png", width=150)
         selected = option_menu(
-            menu_title="Catálogo Sísmico",
+            menu_title="Menú Principal",
             options=["Inicio", "Mapa Interactivo", "Análisis Gráfico", "Conclusión", "Sobre Nosotros"],
-            icons=["house-door-fill", "map-fill", "bar-chart-line-fill", "book-half", "people-fill"],
-            menu_icon="tsunami", default_index=0
+            icons=["house", "map-fill", "bar-chart-line", "book-half", "people-fill"],
+            menu_icon="cast", default_index=0
         )
-    
+
+    # Navegación por páginas
     if selected == "Inicio":
         pagina_inicio()
     elif selected == "Mapa Interactivo":
@@ -450,5 +481,6 @@ def main():
     elif selected == "Sobre Nosotros":
         pagina_sobre_nosotros()
 
+# Llamada principal
 if __name__ == "__main__":
     main()
