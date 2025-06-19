@@ -1,8 +1,24 @@
-streamlit>=1.25.0
-pandas>=1.5.0
-geopandas>=0.13.0
-pydeck>=0.8.0
-plotly>=5.0.0
-matplotlib>=3.5.0
-streamlit-option-menu>=0.3.6
-Pillow>=9.0.0
+# Framework de la aplicación web
+streamlit
+streamlit-option-menu
+
+# Análisis y manipulación de datos
+pandas
+numpy
+
+# Procesamiento y visualización geoespacial
+geopandas
+folium
+streamlit-folium
+pydeck
+
+# Gráficos y visualizaciones
+plotly
+matplotlib
+
+# Utilidades (para manejo de imágenes)
+Pillow
+
+# ¡CRUCIAL para la compilación de C++!
+# pybind11 es el "puente" que conecta tu código Python y C++
+pybind11

@@ -1,13 +1,12 @@
-# Dockerfile Definitivo y Corregido para Desplegar en Railway
+# Dockerfile Definitivo para Desplegar una App Streamlit con un Módulo C++
 
-# 1. Usar una imagen base oficial de Python sobre Linux
+# --- PASO 1: Usar una Imagen Base de Python sobre Linux ---
+# Empezamos con un sistema operativo Linux (Debian) que ya tiene Python instalado.
 FROM python:3.11-slim
 
-# 2. Instalar todas las dependencias del sistema operativo (OS)
-#    - build-essential y g++: para compilar C++
-#    - cmake: para usar tu CMakeLists.txt (el método profesional)
-#    - libgeos-dev: la librería GEOS que necesita tu código C++
-#    - pkg-config: la herramienta que CMake necesita para encontrar GEOS
+# --- PASO 2: Instalar Dependencias del Sistema Operativo (OS) ---
+# Esto es lo que no se puede hacer en plataformas simples. Aquí instalamos
+# todo lo necesario para compilar C++ y para que GeoPandas funcione.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     g++ \
@@ -16,34 +15,38 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
-# 3. Establecer directorio de trabajo
+# --- PASO 3: Configurar el Entorno de la Aplicación ---
+# Establecemos el directorio de trabajo dentro del contenedor.
 WORKDIR /app
 
-# 4. Copiar e instalar las dependencias de Python
-#    Asegúrate de que tu archivo se llame 'requirements.txt' y no 'requeriments.txt'
+# --- PASO 4: Instalar las Dependencias de Python ---
+# Copiamos solo el archivo de requerimientos primero para aprovechar la caché de Docker.
+# Si este archivo no cambia, Docker no volverá a ejecutar este paso en futuras construcciones.
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 5. Copiar el resto de tu proyecto al contenedor
+# --- PASO 5: Copiar TODO el Código de tu Proyecto ---
+# Copia el resto de tus archivos (.py, .cpp, .csv, CMakeLists.txt, etc.) al contenedor.
 COPY . .
 
-# 6. ¡Paso Clave! Compilar el módulo C++ en pasos separados para mejor depuración
-RUN mkdir build
-WORKDIR /app/build
+# --- PASO 6: Compilar el Módulo C++ (El Paso Clave) ---
+# Usamos CMake, que es el método profesional y leerá tu CMakeLists.txt.
+# Creamos una carpeta 'build', entramos, configuramos con cmake y compilamos con make.
+RUN mkdir build && \
+    cd build && \
+    cmake .. && \
+    make
 
-# 6a. Ejecutar CMake. Si esto falla, el error nos dirá por qué.
-RUN cmake ..
+# --- PASO 7: Configurar y Ejecutar la Aplicación ---
+# Exponer el puerto que Streamlit usará.
+EXPOSE 8501
 
-# 6b. Ejecutar Make. Si esto falla, veremos el error de compilación de C++.
-RUN make
-
-# 7. Regresar al directorio principal de la aplicación
-WORKDIR /app
-
-# 8. Variables de entorno que Railway necesita para servir la app
+# Variables de entorno que plataformas como Railway usan para asignar el puerto dinámicamente.
 ENV HOST=0.0.0.0
 ENV PORT=$PORT
 
-# 9. Comando final para arrancar la aplicación de Streamlit
-#    Le decimos a Python que también busque el módulo compilado en la carpeta 'build'
+# El comando final para arrancar la aplicación.
+# Le decimos a Python que también busque en la carpeta 'build' para encontrar
+# nuestro módulo C++ compilado (.so).
+# Asegúrate de que tu archivo principal se llame 'app.py' o cámbialo aquí.
 CMD ["sh", "-c", "PYTHONPATH=$PYTHONPATH:build streamlit run app.py --server.port $PORT --server.address $HOST"]
