@@ -4,11 +4,9 @@
 import streamlit as st
 import pandas as pd
 import geopandas as gpd
-import folium
 from folium.plugins import MarkerCluster
 from streamlit_option_menu import option_menu
 from PIL import Image
-from streamlit_folium import st_folium
 import plotly.express as px
 import matplotlib.pyplot as plt
 import os
@@ -309,7 +307,7 @@ def pagina_mapa(gdf, departamentos_gdf):
         tooltip=tooltip,
         map_style="mapbox://styles/mapbox/light-v10"
     ))
-    
+
 def pagina_graficos(df):
     st.title("📊 Análisis Gráfico de Sismos")
     
