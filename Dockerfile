@@ -1,4 +1,4 @@
-# Dockerfile Definitivo para Desplegar en Railway
+# Dockerfile Definitivo y Corregido para Desplegar
 
 # 1. Usar una imagen base oficial de Python sobre Linux
 FROM python:3.11-slim
@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     g++ \
     cmake \
     libgeos-dev \
+    pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
 # 3. Establecer directorio de trabajo
@@ -18,7 +19,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 5. Copiar el resto de tu proyecto (código .py, .cpp, .csv, CMakeLists.txt, etc.)
+# 5. Copiar el resto de tu proyecto al contenedor
 COPY . .
 
 # 6. ¡Paso Clave! Compilar el módulo C++ DENTRO del contenedor usando CMake
@@ -27,10 +28,10 @@ RUN mkdir build && \
     cmake .. && \
     make
 
-# 7. Variables de entorno que Railway necesita para servir la app
+# 7. Variables de entorno que Railway (o similar) necesita para servir la app
 ENV HOST=0.0.0.0
 ENV PORT=$PORT
 
-# 8. Comando para arrancar la aplicación de Streamlit
-# Le decimos a Python que busque el módulo compilado en la carpeta 'build'
+# 8. Comando final para arrancar la aplicación de Streamlit
+#    Le decimos a Python que también busque el módulo compilado en la carpeta 'build'
 CMD ["sh", "-c", "PYTHONPATH=$PYTHONPATH:build streamlit run app.py --server.port $PORT --server.address $HOST"]
