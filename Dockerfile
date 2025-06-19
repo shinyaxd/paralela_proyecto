@@ -1,7 +1,7 @@
-# Imagen base con soporte geoespacial y compiladores
-FROM python:3.10-slim
+# Imagen base más completa con compiladores y librerías necesarias
+FROM python:3.10
 
-# Instalar dependencias del sistema necesarias
+# Instalar compiladores y librerías de desarrollo necesarias
 RUN apt-get update && apt-get install -y \
     build-essential \
     g++ \
@@ -20,7 +20,7 @@ ENV PROJ_LIB=/usr/share/proj
 # Crear directorio de trabajo
 WORKDIR /app
 
-# Copiar archivos al contenedor
+# Copiar archivos del proyecto al contenedor
 COPY . /app
 
 # Instalar dependencias de Python
@@ -33,8 +33,7 @@ RUN g++ -O3 -Wall -shared -std=c++11 -fPIC \
     -I/usr/include/geos \
     -I/usr/local/include/python3.10 \
     -I/usr/local/lib/python3.10/site-packages/pybind11/include \
-    -o motor_sjoin_cpp$(python3-config --extension-suffix) \
-    -lgeos
+    -o motor_sjoin_cpp$(python3-config --extension-suffix)
 
 # Exponer el puerto de Streamlit
 EXPOSE 8501
