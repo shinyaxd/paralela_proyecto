@@ -32,6 +32,9 @@ RUN mkdir build && \
     cmake -Dpybind11_DIR=$(python3 -m pybind11 --cmakedir) .. && \
     make
 
+#    Esta línea nos mostrará el nombre exacto del archivo .so que se creó.
+RUN echo "Contenido del directorio build:" && ls -l build/
+
 # =============================================================================
 # --- Etapa 2: El Ejecutor (Runner) ---
 # (La segunda etapa no necesita cambios, pero se incluye para que el archivo esté completo)
