@@ -6,8 +6,8 @@
 #include <utility>
 
 std::vector<std::string> realizar_sjoin_paralelo(
-    const std::vector<std::pair<double, double>> &coords,
-    const std::vector<std::string> &wkt_departamentos,
+    const std::vector<std::pair<double, double>> &coords_sismos,
+    const std::vector<std::string> &wkts_departamentos,
     const std::vector<std::string> &nombres_departamentos
 );
 

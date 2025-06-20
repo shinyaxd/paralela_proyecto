@@ -1,42 +1,41 @@
-# Imagen base completa para soportar compilación C++ y librerías geoespaciales
-FROM python:3.10
+# Dockerfile Definitivo para Desplegar una App Streamlit con un Módulo C++
 
-# Evitar warning de pip root
-ENV PIP_ROOT_USER_ACTION=ignore
+# 1. Usar una imagen base de Python completa para máxima compatibilidad
+FROM python:3.11-bullseye
 
-# Instalar compiladores y librerías necesarias para C++ y GEOS C API
-RUN apt-get update && apt-get install -y \
+# 2. Instalar todas las dependencias del sistema operativo (OS)
+RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     g++ \
-    python3-dev \
+    cmake \
     libgeos-dev \
-    libproj-dev \
-    libgdal-dev \
-    curl \
-    git \
-    && apt-get clean
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
 
-# Crear directorio de trabajo
+# 3. Establecer el directorio de trabajo
 WORKDIR /app
 
-# Copiar todos los archivos del proyecto al contenedor
-COPY . /app
+# 4. Instalar las dependencias de Python
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Instalar dependencias de Python
-RUN pip install --upgrade pip
-RUN pip install -r requirements.txt
+# 5. Copiar el resto de tu proyecto al contenedor
+COPY . .
 
-# Compilar el módulo C++ con pybind11 y la API geos_c
-RUN g++ -O3 -Wall -shared -std=c++11 -fPIC \
-    bindings.cpp procesador_sjoin.cpp \
-    -I/usr/include \
-    -I/usr/local/include/python3.10 \
-    -I/usr/local/lib/python3.10/site-packages/pybind11/include \
-    -o motor_sjoin_cpp$(python3-config --extension-suffix) \
-    -lgeos_c -fopenmp
+# 6. ¡Paso Clave! Compilar el módulo C++ DENTRO del contenedor usando CMake
+RUN mkdir build && \
+    cd build && \
+    cmake .. && \
+    make
 
-# Exponer el puerto de Streamlit (Render usará este puerto)
-EXPOSE 10000
+# 7. Exponer el puerto que usará Streamlit
+EXPOSE 8501
 
-# Comando para ejecutar la aplicación
-CMD ["streamlit", "run", "app.py", "--server.port=10000", "--server.address=0.0.0.0"]
+# 8. Variables de entorno que plataformas como Railway usan
+ENV HOST=0.0.0.0
+ENV PORT=$PORT
+
+# 9. Comando final para arrancar tu aplicación
+# Le decimos a Python que también busque el módulo compilado en la carpeta 'build'
+# Asegúrate de que tu archivo principal se llame 'app.py'
+CMD ["sh", "-c", "PYTHONPATH=$PYTHONPATH:build streamlit run app.py --server.port $PORT --server.address $HOST"]

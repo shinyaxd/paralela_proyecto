@@ -15,11 +15,12 @@ import pydeck as pdk
 
 # Importa el motor C++ compilado. Si no existe, la app se detendrá con un error claro.
 try:
+    # 1. Este es el primer cambio: importar el módulo directamente.
     import motor_sjoin_cpp
 except ImportError:
     st.error(
         "Error Crítico: No se pudo importar el módulo 'motor_sjoin_cpp'. "
-        "Asegúrate de haberlo compilado con éxito (Paso 3 de la guía anterior)."
+        "Asegúrate de haber compilado el proyecto con éxito usando el último comando g++ para pybind11."
     )
     st.stop()
 
