@@ -9,8 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     cmake \
     python3-dev \
     libgeos-dev \
-    pkg-config \
-    && rm -rf /var/lib/apt/lists/*
+    pkg-config
 
 # 2. Establecer el directorio de trabajo y copiar los archivos de requerimientos.
 WORKDIR /app
