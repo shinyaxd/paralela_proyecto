@@ -55,4 +55,4 @@ COPY --from=builder /app/build/motor_sjoin_cpp.cpython-312-x86_64-linux-gnu.so .
 EXPOSE 8501
 ENV HOST=0.0.0.0
 ENV PORT=8501
-CMD ["streamlit", "run", "app.py", "--server.port", "$PORT", "--server.address", "$HOST"]
+CMD sh -c "streamlit run app.py --server.port \$PORT --server.address 0.0.0.0"
