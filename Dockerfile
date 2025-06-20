@@ -1,41 +1,79 @@
-# Dockerfile Definitivo para Desplegar una App Streamlit con un Módulo C++
+# =============================================================================
+# --- Etapa 1: El Constructor (Builder) ---
+# En esta etapa instalamos todo lo necesario para COMPILAR el módulo C++
+# y las dependencias de Python.
+# =============================================================================
+FROM python:3.11-bullseye AS builder
 
-# 1. Usar una imagen base de Python completa para máxima compatibilidad
-FROM python:3.11-bullseye
-
-# 2. Instalar todas las dependencias del sistema operativo (OS)
+# 1. Instalar dependencias del sistema operativo para la compilación.
+#    - build-essential: Contiene g++, make y otras herramientas esenciales.
+#    - cmake: Para procesar tu CMakeLists.txt.
+#    - python3-dev: Contiene las cabeceras de C de Python, necesarias para pybind11.
+#    - libgeos-dev: La librería de desarrollo de GEOS, requerida por tu código C++.
+#    - pkg-config: Herramienta que cmake usa para encontrar librerías como GEOS.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
-    g++ \
     cmake \
+    python3-dev \
     libgeos-dev \
     pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
-# 3. Establecer el directorio de trabajo
+# 2. Establecer el directorio de trabajo y copiar los archivos de requerimientos.
 WORKDIR /app
-
-# 4. Instalar las dependencias de Python
 COPY requirements.txt .
+
+# 3. Instalar las dependencias de Python.
+#    Usamos --no-cache-dir para mantener la imagen más ligera.
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 5. Copiar el resto de tu proyecto al contenedor
+# 4. Copiar TODO el código fuente del proyecto al contenedor.
 COPY . .
 
-# 6. ¡Paso Clave! Compilar el módulo C++ DENTRO del contenedor usando CMake
+# 5. Compilar el módulo C++ usando CMake.
+#    Esto ejecutará los comandos de tu CMakeLists.txt y creará el archivo
+#    'motor_sjoin_cpp.so' dentro de la carpeta 'build'.
 RUN mkdir build && \
     cd build && \
     cmake .. && \
     make
 
-# 7. Exponer el puerto que usará Streamlit
+# =============================================================================
+# --- Etapa 2: El Ejecutor (Runner) ---
+# Esta es la imagen final que se desplegará. Es mucho más ligera y segura
+# porque no contiene las herramientas de compilación.
+# =============================================================================
+FROM python:3.11-slim-bullseye
+
+# 1. Instalar solo las dependencias de sistema para EJECUTAR la aplicación.
+#    No necesitamos las versiones '-dev', solo las librerías compartidas.
+#    geopandas y tu módulo C++ necesitan 'libgeos-c1v5'.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgeos-c1v5 \
+    && rm -rf /var/lib/apt/lists/*
+
+# 2. Establecer el directorio de trabajo.
+WORKDIR /app
+
+# 3. Copiar los artefactos necesarios desde la etapa 'builder'.
+#    a) Las dependencias de Python ya instaladas.
+COPY --from=builder /usr/local/lib/python3.11/site-packages/ /usr/local/lib/python3.11/site-packages/
+#    b) El código de la aplicación Python y los datos.
+COPY --from=builder /app/app.py .
+COPY --from=builder /app/Dataset_1960_2023_sismo.csv .
+COPY --from=builder /app/img/ /app/img/  
+#Asegúrate de que tu carpeta de imágenes se llame 'img'
+#    c) ¡El módulo C++ compilado! Esta es la pieza clave.
+COPY --from=builder /app/build/motor_sjoin_cpp.cpython-311-x86_64-linux-gnu.so .
+
+# 4. Exponer el puerto que usará Streamlit.
 EXPOSE 8501
 
-# 8. Variables de entorno que plataformas como Railway usan
+# 5. Variables de entorno para compatibilidad con plataformas de despliegue.
+#    Render usará la variable $PORT.
 ENV HOST=0.0.0.0
-ENV PORT=$PORT
+ENV PORT=8501
 
-# 9. Comando final para arrancar tu aplicación
-# Le decimos a Python que también busque el módulo compilado en la carpeta 'build'
-# Asegúrate de que tu archivo principal se llame 'app.py'
-CMD ["sh", "-c", "PYTHONPATH=$PYTHONPATH:build streamlit run app.py --server.port $PORT --server.address $HOST"]
+# 6. Comando final para arrancar la aplicación.
+#    No necesitas PYTHONPATH porque el módulo .so está en el mismo directorio que app.py.
+CMD ["streamlit", "run", "app.py", "--server.port", "$PORT", "--server.address", "$HOST"]
