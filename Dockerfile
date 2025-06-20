@@ -32,7 +32,7 @@ COPY . .
 
 # 5. Compilar el módulo C++ usando CMake.
 #    Esto ejecutará los comandos de tu CMakeLists.txt y creará el archivo
-#    'motor_sjoin_cpp.so' dentro de la carpeta 'build'.
+#    del módulo dentro de la carpeta 'build'.
 RUN mkdir build && \
     cd build && \
     cmake .. && \
@@ -46,8 +46,7 @@ RUN mkdir build && \
 FROM python:3.11-slim-bullseye
 
 # 1. Instalar solo las dependencias de sistema para EJECUTAR la aplicación.
-#    No necesitamos las versiones '-dev', solo las librerías compartidas.
-#    geopandas y tu módulo C++ necesitan 'libgeos-c1v5'.
+#    geopandas y tu módulo C++ necesitan 'libgeos-c1v5' en tiempo de ejecución.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgeos-c1v5 \
     && rm -rf /var/lib/apt/lists/*
@@ -61,9 +60,8 @@ COPY --from=builder /usr/local/lib/python3.11/site-packages/ /usr/local/lib/pyth
 #    b) El código de la aplicación Python y los datos.
 COPY --from=builder /app/app.py .
 COPY --from=builder /app/Dataset_1960_2023_sismo.csv .
-COPY --from=builder /app/img/ /app/img/  
-#Asegúrate de que tu carpeta de imágenes se llame 'img'
 #    c) ¡El módulo C++ compilado! Esta es la pieza clave.
+#       El nombre exacto del archivo .so puede variar ligeramente.
 COPY --from=builder /app/build/motor_sjoin_cpp.cpython-311-x86_64-linux-gnu.so .
 
 # 4. Exponer el puerto que usará Streamlit.
