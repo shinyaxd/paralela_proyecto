@@ -7,5 +7,4 @@ env/
 venv/
 .git
 .gitignore
-*.csv
 *.geojson
