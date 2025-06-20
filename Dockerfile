@@ -47,6 +47,7 @@ WORKDIR /app
 
 # Copiar los artefactos necesarios desde la etapa 'builder'.
 COPY --from=builder /usr/local/lib/python3.12/site-packages/ /usr/local/lib/python3.12/site-packages/
+COPY --from=builder /usr/local/bin/ /usr/local/bin/
 COPY --from=builder /app/app.py .
 COPY --from=builder /app/Dataset_1960_2023_sismo.csv .
 COPY --from=builder /app/img/ /app/img/
