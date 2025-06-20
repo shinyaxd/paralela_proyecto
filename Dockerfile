@@ -51,6 +51,7 @@ COPY --from=builder /usr/local/bin/ /usr/local/bin/
 COPY --from=builder /app/app.py .
 COPY --from=builder /app/Dataset_1960_2023_sismo.csv .
 COPY --from=builder /app/img/ /app/img/
+COPY --from=builder /app/departamentos_perú.geojson .
 COPY --from=builder /app/build/motor_sjoin_cpp.cpython-312-x86_64-linux-gnu.so .
 
 EXPOSE 8501
